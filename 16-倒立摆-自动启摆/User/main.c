@@ -35,8 +35,8 @@
 
 #define CENTER_RANGE 500 // 中心角度范围区间(在此范围内可以调控，若超过此区间则不可调控，PID程序自动停止)
 
-#define START_PWM 35     // 启摆时施加给电机的PWM脉冲大小（驱动力强度）
-#define START_TIME 100   // 每次施加启摆脉冲的持续时间（单位：毫秒）
+#define START_PWM 35   // 启摆时施加给电机的PWM脉冲大小（驱动力强度）
+#define START_TIME 100 // 每次施加启摆脉冲的持续时间（单位：毫秒）
 
 uint8_t key_num; // 按键的编号，1为按键1，2为按键2，3为按键3，4为按键4
 
@@ -50,22 +50,22 @@ int16_t Location; // 小车位置：Speed速度值的累加（即对速度进行
 /* 角度环（内环）PID 参数配置 */
 Pid_t AngePid = {
 	.Target = CENTER_ANGLE, // 目标值设为中心角度基准2048，使摆杆尽力朝向垂直竖直方向稳定
-	.Kp = 0.2,              // 比例系数
-	.Ki = 0.01,             // 积分系数
-	.Kd = 0.4,              // 微分系数
+	.Kp = 0.2,				// 比例系数
+	.Ki = 0.01,				// 积分系数
+	.Kd = 0.4,				// 微分系数
 
-	.OutMax = 100,          // 最大输出限制（对应电机最大正向PWM）
-	.OutMin = -100,         // 最小输出限制（对应电机最大反向PWM）
+	.OutMax = 100,	// 最大输出限制（对应电机最大正向PWM）
+	.OutMin = -100, // 最小输出限制（对应电机最大反向PWM）
 };
 
 /* 位置环（外环）PID 参数配置 */
 Pid_t LocationPid = {
 	.Target = 0, // 初始目标位置设在起点0附近
-	.Kp = 0.4,   // 比例系数
-	.Ki = 0.01,  // 积分系数
-	.Kd = 4,     // 微分系数
+	.Kp = 0.4,	 // 比例系数
+	.Ki = 0.01,	 // 积分系数
+	.Kd = 4,	 // 微分系数
 
-	.OutMax = 100,  // 最大输出限幅
+	.OutMax = 100,	// 最大输出限幅
 	.OutMin = -100, // 最小输出限幅
 };
 
@@ -89,8 +89,15 @@ int main(void)
 		/* 状态切换控制逻辑 */
 		if (key_num == 1)
 		{
-			// 按键1用于启动/停止倒立摆控制
-			RunState = !RunState; // 在0（停止）和1（开始启摆）之间翻转状态
+			/*在任何其他状态下按K1，都能回到停止状态,然后1按键按下后直接转入21状态，意思就是1按K1立刻先摆动1次，这样可以让摆杆离开盲区*/
+			if (RunState == 0)
+			{
+				RunState = 21;
+			}
+			else
+			{
+				RunState = 0;
+			}
 		}
 
 		if (key_num == 4)
@@ -180,9 +187,9 @@ void TIM1_UP_IRQHandler(void)
 
 		Angle = AD_GetValue(); // 模数转换读取角度传感器当前的角度值
 
-		Speed = Encoder_Get(); // 读取小车速度（以本次1ms内编码器计数值增量为表征，正负代表方向）
+		Speed = Encoder_Get(); // 读取编码器速度（以本次1ms内编码器计数值增量为表征，正负代表方向）
 
-		Location += Speed; // 累加小车位移量得到当前小车相对起点的累计位置
+		Location += Speed; // 累加位移量得到当前相对起点的累计位置
 
 		if (RunState == 0) // 状态0：停机保护状态
 		{
@@ -198,7 +205,7 @@ void TIM1_UP_IRQHandler(void)
 				Angle1 = Angle0; // Angle1保存旧的最新值
 				Angle0 = Angle;	 // Angle0更新为最新的角度测量值
 
-				/* 
+				/*
 				 * 判断摆杆是否偏向右侧且此时正好达到了右侧摆动的最大振幅点（最高极点）：
 				 * 如果连续三次读数都大于 (CENTER_ANGLE + CENTER_RANGE)，说明整体偏右。
 				 * 如果 Angle1（上一次的角度）同时小于 Angle0 且小于 Angle2，说明数值在 Angle1 处探底。
@@ -206,13 +213,13 @@ void TIM1_UP_IRQHandler(void)
 				 */
 				if (Angle0 > CENTER_ANGLE + CENTER_RANGE && Angle1 > CENTER_ANGLE + CENTER_RANGE && Angle2 > CENTER_ANGLE + CENTER_RANGE)
 				{
-					if (Angle1 < Angle0 && Angle1 < Angle2) 
+					if (Angle1 < Angle0 && Angle1 < Angle2)
 					{
 						RunState = 21; // 触发右摆起摆驱动序列第一阶段
 					}
 				}
 
-				/* 
+				/*
 				 * 判断摆杆是否偏向左侧且此时正好达到了左侧摆动的最大振幅点（最高极点）：
 				 * 如果连续三次读数都小于 (CENTER_ANGLE - CENTER_RANGE)，说明整体偏左。
 				 * 如果 Angle1 同时大于 Angle0 且大于 Angle2，说明数值在 Angle1 处探顶。
@@ -220,18 +227,33 @@ void TIM1_UP_IRQHandler(void)
 				 */
 				if (Angle0 < CENTER_ANGLE - CENTER_RANGE && Angle1 < CENTER_ANGLE - CENTER_RANGE && Angle2 < CENTER_ANGLE - CENTER_RANGE)
 				{
-					if (Angle1 > Angle0 && Angle1 > Angle2) 
+					if (Angle1 > Angle0 && Angle1 > Angle2)
 					{
 						RunState = 31; // 触发左摆起摆驱动序列第一阶段
 					}
 				}
+
+				/*转入状态4，当本次角度值与上次角度值均处于中心区间的时候，进入状态4*/
+				// 之所以还加入Angle1，是因为怕状态不稳，因为就是有时候会出现这个现象:起摆之后刚刚进入中立区间1点点，立刻转入状态4，但这时可能由于摆杆不稳定或者噪声抖动等原因，导致下次角度又离开中区间了。那这时是不是就触发了自动停止的程序了？
+				if (Angle0 > CENTER_ANGLE - CENTER_RANGE && Angle0 < CENTER_ANGLE + CENTER_RANGE &&
+					Angle1 > CENTER_ANGLE - CENTER_RANGE && Angle1 < CENTER_ANGLE + CENTER_RANGE)
+				{
+					RunState = 4;
+
+					/*在起摆成功的时候，归0下实际位置*/
+					Location = 0;
+
+					/*积分清0*/
+					AngePid.ErrorInt = 0;	  // 清理角度环的积分误差
+					LocationPid.ErrorInt = 0; // 清理位置环的积分误差
+				}
 			}
 		}
-		
+
 		/* 右侧最高点起摆驱动序列（通过小车的左右急移动顺势对摆杆做功，使之摆幅增大） */
 		else if (RunState == 21) // 状态21：向左顺势推摆
 		{
-			Motor_SetPWM(START_PWM); // 电机向左急加速拉车，利用惯性使摆杆向右甩得更高
+			Motor_SetPWM(START_PWM); // 横杆左拉，利用惯性使摆杆向右甩得更高(向左为顺时针，PWM输出为正)
 			Count_Time = START_TIME; // 设定加力时间为100ms
 			RunState = 22;			 // 进入第一阶段加力延时等待
 		}
@@ -245,7 +267,7 @@ void TIM1_UP_IRQHandler(void)
 		}
 		else if (RunState == 23) // 状态23：向右反向拉摆
 		{
-			Motor_SetPWM(-START_PWM); // 待摆杆往左回摆时，小车立刻急加速往右拉，顺势增加摆杆回摆动能
+			Motor_SetPWM(-START_PWM); // 横杆右拉，横杆回到原来的位置(向右为逆时针，PWM输出为负)
 			Count_Time = START_TIME;  // 设定加力时间为100ms
 			RunState = 24;			  // 进入第二阶段加力延时等待
 		}
@@ -254,7 +276,9 @@ void TIM1_UP_IRQHandler(void)
 			Count_Time--;
 			if (Count_Time == 0) // 100ms反向加力结束
 			{
-				Motor_SetPWM(0); // 暂时关闭电机输出，让小车滑行，使摆杆自由荡起
+				/*因为上1次设置电机速度是这里，给它1个负的速度，如果在转入状态1之前不把速度至0，
+				那在状态1里，电机会维持最后设置的速度，不会停下来。到时候状态4角度判断的时候有可能就不处于中心值里面了*/
+				Motor_SetPWM(0); // 暂时关闭电机输出，使摆杆自由荡起
 				RunState = 1;	 // 重新回到状态1，继续等待下一次更高点判定，实现逐步累积能量直至直立
 			}
 		}
@@ -262,9 +286,9 @@ void TIM1_UP_IRQHandler(void)
 		/* 左侧最高点起摆驱动序列 */
 		else if (RunState == 31) // 状态31：向右顺势推摆
 		{
-			Motor_SetPWM(-START_PWM); // 电机向右急加速拉车，利用惯性使摆杆向左甩得更高
+			Motor_SetPWM(-START_PWM); // 横杆右拉，利用惯性使摆杆向左甩得更高(向右为逆时针，PWM输出为负)
 			Count_Time = START_TIME;  // 设定加力时间为100ms
-			RunState = 32;			 // 进入第一阶段加力延时等待
+			RunState = 32;			  // 进入第一阶段加力延时等待
 		}
 		else if (RunState == 32) // 状态32：第一阶段加力延时计数
 		{
@@ -276,7 +300,7 @@ void TIM1_UP_IRQHandler(void)
 		}
 		else if (RunState == 33) // 状态33：向左反向拉摆
 		{
-			Motor_SetPWM(START_PWM); // 待摆杆往右回摆时，小车立刻急加速往左拉，顺势增加摆杆回摆动能
+			Motor_SetPWM(START_PWM); // 横杆左拉，横杆回到原来的位置(向左为顺时针，PWM输出为正)
 			Count_Time = START_TIME; // 设定加力时间为100ms
 			RunState = 34;			 // 进入第二阶段加力延时等待
 		}
@@ -302,10 +326,10 @@ void TIM1_UP_IRQHandler(void)
 			{
 				RunState = 0; // 触发停机
 			}
-			
+
 			/* 内环角度控制计算（5ms执行周期） */
 			Count1++;
-			if (Count1 >= 5) 
+			if (Count1 >= 5)
 			{
 				Count1 = 0; // 重置计数器
 
@@ -318,7 +342,7 @@ void TIM1_UP_IRQHandler(void)
 
 			/* 外环位置控制计算（50ms执行周期） */
 			Count2++;
-			if (Count2 >= 50) 
+			if (Count2 >= 50)
 			{
 				Count2 = 0; // 重置计数器
 
@@ -332,7 +356,7 @@ void TIM1_UP_IRQHandler(void)
 				 * 为了让小车向左回退，我们需要控制小车车体将摆杆向左倾斜（也就是减小内环目标期望值，使得摆杆向左倒），
 				 * 小车就会被带回左边。因此，这里应该用减法关系进行串联。
 				 */
-				AngePid.Target = CENTER_ANGLE - LocationPid.Out; 
+				AngePid.Target = CENTER_ANGLE - LocationPid.Out;
 			}
 		}
 	}
